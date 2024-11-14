@@ -1,0 +1,73 @@
+# Importamos librerías necesarias
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import DoubleType
+
+# Inicializa la sesión de Spark
+spark = SparkSession.builder.appName('Tarea3').getOrCreate()
+
+# Define la ruta del archivo .csv en HDFS
+file_path = 'hdfs://localhost:9000/Tarea3/rows.csv'
+
+# Cargar el archivo .csv en un DataFrame de Spark
+df = spark.read.format('csv').option('header','true').option('inferSchema', 'true').load(file_path)
+
+# Imprimir el esquema original
+print("Esquema original:")
+df.printSchema()
+
+# Mostrar las primeras filas del DataFrame para tener una vista previa de los datos
+print("Primeras filas del DataFrame original:")
+df.show()
+
+# Estadísticas básicas del DataFrame
+print("Estadísticas básicas del DataFrame original:")
+df.summary().show()
+
+### Limpieza de Datos ###
+
+# 1. Eliminar duplicados
+df = df.dropDuplicates()
+print("DataFrame después de eliminar duplicados:")
+df.show()
+
+# 2. Manejar valores nulos
+# Llenar valores nulos en columnas numéricas con la media de esa columna (por ejemplo, en 'VALOR')
+media_valor = df.agg(F.avg(F.col("VALOR")).alias("media_valor")).collect()[0]["media_valor"]
+df = df.fillna({"VALOR": media_valor})
+
+# Llenar valores nulos en columnas de texto con un valor predeterminado
+df = df.fillna({"VIGENCIADESDE": "Fecha desconocida", "VIGENCIAHASTA": "Fecha desconocida"})
+
+# 3. Verificar tipos de datos
+# Asegurarse de que 'VALOR' es de tipo numérico
+df = df.withColumn("VALOR", F.col("VALOR").cast(DoubleType()))
+
+# Verificar nuevamente el esquema para confirmar las transformaciones
+print("Esquema después de limpieza:")
+df.printSchema()
+
+### Análisis Exploratorio de Datos (EDA) ###
+
+# Calcular estadísticas básicas de nuevo después de la limpieza
+print("Estadísticas básicas después de la limpieza:")
+df.summary().show()
+
+# Filtrar filas donde el valor es mayor a 5000
+dias = df.filter(F.col('VALOR') > 5000).select('VALOR', 'VIGENCIADESDE', 'VIGENCIAHASTA')
+print("Días con valor mayor a 5000:")
+dias.show()
+
+# Ordenar filas por la columna 'VALOR' en orden descendente
+sorted_df = df.sort(F.col("VALOR").desc())
+print("Valores ordenados de mayor a menor:")
+sorted_df.show()
+
+### Guardar los Resultados Procesados ###
+
+# Definir la ruta para guardar el archivo procesado
+output_path = 'hdfs://localhost:9000/Tarea3/processed_rows'
+
+# Guardar el DataFrame procesado en HDFS en formato Parquet para eficiencia
+df.write.mode('overwrite').parquet(output_path)
+
+print(f"DataFrame procesado guardado en {output_path}")
